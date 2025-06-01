@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
@@ -11,6 +11,17 @@ function App() {
   const handleFileChange = (event) => {
     setImage(event.target.files[0]);
   };
+
+  const getVideos = () => {
+    try {
+    } catch (error) {
+      console.log("error: ", error);
+    }
+  };
+
+  useEffect(() => {
+    getVideos();
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
