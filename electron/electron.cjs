@@ -1,19 +1,23 @@
 const path = require("path");
-const { app, BrowserWindow } = require("electron");
+const fs = require("fs");
+const https = require("https");
+const { protocol } = require("electron");
 
-const isDev = process.env.IS_DEV == "true" ? true : false;
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
+
+const isDev = process.env.IS_DEV === "true";
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1024,
     height: 650,
     autoHideMenuBar: true,
-
     frame: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: true,
-      contextIsolation: false,
+      contextIsolation: true,
+      nodeIntegration: false, // 🚫 important for security
+      webSecurity: false,
     },
   });
 
@@ -27,21 +31,55 @@ function createWindow() {
       ? "http://localhost:5173"
       : `file://${path.join(__dirname, "../dist/index.html")}`
   );
-  // Open the DevTools.
-  if (isDev) {
-    //mainWindow.webContents.openDevTools();
-  }
 }
 
 app.whenReady().then(() => {
-  createWindow();
-  app.on("activate", function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  protocol.registerFileProtocol("app", (request, callback) => {
+    const url = request.url.substr(6); // remove 'app://'
+    const filePath = path.normalize(`${app.getPath("userData")}/videos/${url}`);
+    callback(filePath);
   });
+
+  createWindow();
 });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+// ✅ Download video file using secure_url
+ipcMain.handle("download-video", async (event, { url, fileName }) => {
+  const downloadPath = path.join(app.getPath("userData"), "videos");
+
+  if (!fs.existsSync(downloadPath)) {
+    fs.mkdirSync(downloadPath, { recursive: true });
+  }
+
+  const filePath = path.join(downloadPath, fileName);
+
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(filePath);
+    https
+      .get(url, (response) => {
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close(() => resolve(filePath));
+        });
+      })
+      .on("error", (err) => {
+        fs.unlink(filePath, () => reject(err.message));
+      });
+  });
+});
+
+// ❌ Delete downloaded video
+ipcMain.handle("delete-video", async (event, filePath) => {
+  try {
+    fs.unlinkSync(filePath);
+    return true;
+  } catch (err) {
+    return false;
   }
 });

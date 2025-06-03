@@ -1,10 +1,7 @@
-window.addEventListener("DOMContentLoaded", () => {
-  const replaceText = (selector, text) => {
-    const element = document.getElementById(selector);
-    if (element) element.innerText = text;
-  };
+const { contextBridge, ipcRenderer } = require("electron");
 
-  for (const type of ["chrome", "node", "electron"]) {
-    replaceText(`${type}-version`, process.versions[type]);
-  }
+contextBridge.exposeInMainWorld("electron", {
+  downloadVideo: (url, fileName) =>
+    ipcRenderer.invoke("download-video", { url, fileName }),
+  deleteVideo: (filePath) => ipcRenderer.invoke("delete-video", filePath),
 });
