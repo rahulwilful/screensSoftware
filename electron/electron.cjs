@@ -7,6 +7,14 @@ const { app, BrowserWindow, ipcMain, shell } = require("electron");
 
 const isDev = process.env.IS_DEV === "true";
 
+// Define the video directory path
+const videoDir = path.join(app.getPath("userData"), "videos");
+
+// Ensure the directory exists
+if (!fs.existsSync(videoDir)) {
+  fs.mkdirSync(videoDir, { recursive: true });
+}
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1024,
@@ -81,5 +89,34 @@ ipcMain.handle("delete-video", async (event, filePath) => {
     return true;
   } catch (err) {
     return false;
+  }
+});
+
+//get downloaded files
+ipcMain.handle("get-downloaded-videos", async (event) => {
+  try {
+    console.log("Fetching video files from directory:", videoDir);
+
+    if (!fs.existsSync(videoDir)) {
+      console.error("Directory does not exist:", videoDir);
+      return [];
+    }
+
+    const files = fs.readdirSync(videoDir);
+    console.log("Files found in directory:", files);
+
+    const videoFiles = files
+      .filter((file) => file.endsWith(".mp4"))
+      .map((file) => ({
+        public_id: path.basename(file, ".mp4"),
+        localPath: path.join(videoDir, file),
+      }));
+
+    console.log("Filtered video files:", videoFiles);
+
+    return videoFiles;
+  } catch (err) {
+    console.error("Error reading video directory:", err);
+    return [];
   }
 });

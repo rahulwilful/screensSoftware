@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import axiosClient from "./axiosClient";
 import showToast from "./components/notification/ShowtToast";
 import "./App.css";
@@ -6,7 +6,8 @@ import "./App.css";
 function App() {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [proceeded, setProceeded] = useState(false);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(null);
+  const videoRef = useRef(null);
 
   const handleProceed = async () => {
     setIsProcessing(true);
@@ -14,11 +15,9 @@ function App() {
       const res = await axiosClient.get(
         `video/get/by/location/id/6830114362e775e471a0bd7d`
       );
-
       console.log("links : ", res?.data?.result);
 
       const videos = res?.data?.result || [];
-
       const downloaded = [];
 
       for (const video of videos) {
@@ -38,7 +37,11 @@ function App() {
       }
 
       setDownloadedVideos(downloaded);
-      setProceeded(true);
+
+      // Automatically start playing videos in full view mode if there are videos
+      if (downloaded.length > 0) {
+        setCurrentVideoIndex(0);
+      }
     } catch (error) {
       console.error("Error fetching videos:", error);
       showToast("Failed to fetch videos", "error");
@@ -59,31 +62,75 @@ function App() {
     }
   };
 
-  return (
-    <div className="container">
-      {!proceeded && (
-        <button onClick={handleProceed} disabled={isProcessing}>
-          {isProcessing ? "Processing..." : "Proceed"}
-        </button>
-      )}
+  const consoleLogVideoFiles = async () => {
+    try {
+      const existing = await window.electron.getDownloadedVideos();
+      console.log("Existing videos:", existing);
+      if (existing.length === 0) {
+        handleProceed();
+      } else {
+        setDownloadedVideos(existing);
+        if (existing.length > 0) {
+          setCurrentVideoIndex(0);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching existing videos:", error);
+      handleProceed();
+    }
+  };
 
-      {proceeded && (
-        <>
-          <h2>Downloaded Videos</h2>
-          {downloadedVideos.length === 0 ? (
-            <p>No videos downloaded.</p>
-          ) : (
-            downloadedVideos.map((video) => (
-              <div key={video.public_id} className="video-card">
-                <video width="300" controls src={`file://${video.localPath}`} />
-                <p>{video.public_id}</p>
-                <button onClick={() => handleDelete(video.localPath)}>
-                  Delete
-                </button>
-              </div>
-            ))
-          )}
-        </>
+  const playNextVideo = () => {
+    if (currentVideoIndex < downloadedVideos.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+    } else {
+      setCurrentVideoIndex(0); // Loop back to the first video
+    }
+  };
+
+  const toggleFullScreen = () => {
+    if (videoRef.current) {
+      if (videoRef.current.requestFullscreen) {
+        videoRef.current.requestFullscreen().catch((err) => {
+          console.error("Error attempting to enable full-screen mode:", err);
+        });
+      } else if (videoRef.current.webkitRequestFullscreen) {
+        videoRef.current.webkitRequestFullscreen();
+      } else if (videoRef.current.msRequestFullscreen) {
+        videoRef.current.msRequestFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    console.log("useEffect triggered");
+    consoleLogVideoFiles();
+  }, []);
+
+  useEffect(() => {
+    if (currentVideoIndex !== null && videoRef.current) {
+      toggleFullScreen();
+    }
+  }, [currentVideoIndex]);
+
+  return (
+    <div className="fullscreen-video-container">
+      {currentVideoIndex !== null && (
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          src={`file://${downloadedVideos[currentVideoIndex].localPath}`}
+          onEnded={playNextVideo}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            pointerEvents: "none", // prevent any hover interaction
+          }}
+          controls={false}
+        />
       )}
     </div>
   );
