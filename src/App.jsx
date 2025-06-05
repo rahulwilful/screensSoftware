@@ -29,12 +29,14 @@ function App() {
 
           console.log("localPath: ", localPath || " ");
           downloaded.push({ ...video, localPath });
-          showToast(`Downloaded: ${video.public_id}`);
+          //showToast(`Downloaded: ${video.public_id}`);
         } catch (err) {
           console.error(`Download failed for ${video.public_id}`, err);
           showToast(`Failed to download ${video.public_id}`, "error");
         }
       }
+
+      console.log("downloaded: ", downloaded);
 
       setDownloadedVideos(downloaded);
 
@@ -115,23 +117,35 @@ function App() {
 
   return (
     <div className="fullscreen-video-container">
-      {currentVideoIndex !== null && (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          src={`file://${downloadedVideos[currentVideoIndex].localPath}`}
-          onEnded={playNextVideo}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            pointerEvents: "none", // prevent any hover interaction
-          }}
-          controls={false}
-        />
-      )}
+      <div className={`${downloadedVideos.length > 0 ? "d-block" : "d-none"}`}>
+        {currentVideoIndex !== null && (
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            src={`file://${downloadedVideos[currentVideoIndex].localPath}`}
+            onEnded={playNextVideo}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              pointerEvents: "none", // prevent any hover interaction
+            }}
+            controls={false}
+          />
+        )}
+      </div>
+      {/*  <div
+        className={`${downloadedVideos.length > 0 ? "d-none" : "d-block"} fs-1`}
+      >
+        Loading Content
+      </div> */}
+      <div
+        className={` d-flex align-items-center justify-content-center vh-100 fw-bold text-secondary fs-1`}
+      >
+        Loading Content
+      </div>
     </div>
   );
 }
