@@ -7,7 +7,9 @@ function App() {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(null);
+  const [playVideos, setPlayVideos] = useState(true);
   const videoRef = useRef(null);
+  const [renderKey, setRenderKey] = useState(true);
 
   const handleProceed = async () => {
     setIsProcessing(true);
@@ -29,7 +31,7 @@ function App() {
 
           console.log("localPath: ", localPath || " ");
           downloaded.push({ ...video, localPath });
-          //showToast(`Downloaded: ${video.public_id}`);
+          localStorage.setItem(video.public_id, localPath);
         } catch (err) {
           console.error(`Download failed for ${video.public_id}`, err);
           showToast(`Failed to download ${video.public_id}`, "error");
@@ -37,10 +39,8 @@ function App() {
       }
 
       console.log("downloaded: ", downloaded);
-
       setDownloadedVideos(downloaded);
 
-      // Automatically start playing videos in full view mode if there are videos
       if (downloaded.length > 0) {
         setCurrentVideoIndex(0);
       }
@@ -52,24 +52,31 @@ function App() {
     }
   };
 
-  const handleDelete = async (filePath) => {
-    const success = await window.electron.deleteVideo(filePath);
-    if (success) {
-      setDownloadedVideos((prev) =>
-        prev.filter((v) => v.localPath !== filePath)
+  const callIntervaleAPI = async () => {
+    try {
+      const res = await axiosClient.get(
+        `video/get/by/location/id/6830114362e775e471a0bd7d`
       );
-      showToast("Deleted successfully");
-    } else {
-      showToast("Failed to delete", "error");
+
+      const videos = res?.data?.result || [];
+      if (videos.length > 0) {
+        for (let i in videos) {
+          if (videos[i].show_adv == false) {
+            handleDelete(videos[i].public_id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching videos:", error);
     }
   };
 
   const consoleLogVideoFiles = async () => {
     try {
       const existing = await window.electron.getDownloadedVideos();
-      console.log("Existing videos:", existing);
+
       if (existing.length === 0) {
-        handleProceed();
+        await handleProceed();
       } else {
         setDownloadedVideos(existing);
         if (existing.length > 0) {
@@ -78,15 +85,79 @@ function App() {
       }
     } catch (error) {
       console.error("Error fetching existing videos:", error);
-      handleProceed();
+      await handleProceed();
+    }
+  };
+
+  useEffect(() => {
+    console.log("Existing videos:", downloadedVideos);
+    if (downloadedVideos.length > 0) {
+      const interval = setInterval(() => {
+        callIntervaleAPI();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [downloadedVideos]);
+
+  const playAgain = () => {
+    if (
+      videoRef.current &&
+      currentVideoIndex !== null &&
+      downloadedVideos[currentVideoIndex]?.localPath
+    ) {
+      videoRef.current.currentTime = 0;
+      videoRef.current
+        .play()
+        .catch((e) => console.error("Error attempting to play video:", e));
     }
   };
 
   const playNextVideo = () => {
-    if (currentVideoIndex < downloadedVideos.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
+    if (downloadedVideos.length <= 1) {
+      playAgain();
+      console.log("current video: ", downloadedVideos[currentVideoIndex]);
     } else {
-      setCurrentVideoIndex(0); // Loop back to the first video
+      let temp = currentVideoIndex;
+      if (currentVideoIndex < downloadedVideos.length - 1) {
+        setCurrentVideoIndex(currentVideoIndex + 1);
+        temp = temp + 1;
+      } else {
+        setCurrentVideoIndex(0);
+        temp = 0;
+      }
+      console.log("current video: ", downloadedVideos[temp]);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    console.log("id", id);
+    const path = localStorage.getItem(id);
+    if (!path) {
+      console.log("no video is present", id);
+      return;
+    }
+    console.log("path: ", path);
+    try {
+      /*  const res = await axiosClient.delete(`video/delete/${id}`);
+      if (!res) {
+        console.log("could not delete video");
+        return;
+      } */
+
+      const success = await window.electron.deleteVideo(path);
+
+      if (success) {
+        if (downloadedVideos[currentVideoIndex]?.public_id === id) {
+          playNextVideo();
+        }
+        setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
+        localStorage.removeItem(id);
+        showToast("Deleted successfully");
+      } else {
+        showToast("Failed to delete", "error");
+      }
+    } catch (error) {
+      console.error("Error deleting video:", error);
     }
   };
 
@@ -105,7 +176,6 @@ function App() {
   };
 
   useEffect(() => {
-    console.log("useEffect triggered");
     consoleLogVideoFiles();
   }, []);
 
@@ -117,32 +187,35 @@ function App() {
 
   return (
     <div className="fullscreen-video-container">
-      <div className={`${downloadedVideos.length > 0 ? "d-block" : "d-none"}`}>
-        {currentVideoIndex !== null && (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            src={`file://${downloadedVideos[currentVideoIndex].localPath}`}
-            onEnded={playNextVideo}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              pointerEvents: "none", // prevent any hover interaction
-            }}
-            controls={false}
-          />
-        )}
-      </div>
-      {/*  <div
-        className={`${downloadedVideos.length > 0 ? "d-none" : "d-block"} fs-1`}
-      >
-        Loading Content
-      </div> */}
       <div
-        className={` d-flex align-items-center justify-content-center vh-100 fw-bold text-secondary fs-1`}
+        className={`${
+          downloadedVideos.length > 0 && playVideos ? "d-block" : "d-none"
+        }`}
+      >
+        {currentVideoIndex !== null &&
+          downloadedVideos[currentVideoIndex]?.localPath && (
+            <video
+              key={renderKey}
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              src={`file://${downloadedVideos[currentVideoIndex]?.localPath}`}
+              onEnded={playNextVideo}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                pointerEvents: "none",
+              }}
+              controls={false}
+            />
+          )}
+      </div>
+      <div
+        className={`${
+          downloadedVideos.length > 0 ? "d-none" : "d-block"
+        } d-flex align-items-center justify-content-center vh-100 fw-bold text-secondary fs-1`}
       >
         Loading Content
       </div>
