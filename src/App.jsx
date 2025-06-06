@@ -130,19 +130,21 @@ function App() {
   };
 
   const handleDelete = async (id) => {
-    console.log("id", id);
+    console.log("handleDelete called , id", id);
     const path = localStorage.getItem(id);
     if (!path) {
       console.log("no video is present", id);
       return;
     }
     console.log("path: ", path);
+
+    setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
     try {
-      /*  const res = await axiosClient.delete(`video/delete/${id}`);
+      const res = await axiosClient.delete(`video/delete/${id}`);
       if (!res) {
         console.log("could not delete video");
         return;
-      } */
+      }
 
       const success = await window.electron.deleteVideo(path);
 
@@ -152,9 +154,10 @@ function App() {
         }
         setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
         localStorage.removeItem(id);
-        showToast("Deleted successfully");
       } else {
-        showToast("Failed to delete", "error");
+      }
+      if (downloadedVideos[currentVideoIndex]?.public_id === id) {
+        playNextVideo();
       }
     } catch (error) {
       console.error("Error deleting video:", error);
