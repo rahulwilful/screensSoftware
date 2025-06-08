@@ -10,6 +10,7 @@ function App() {
   const [playVideos, setPlayVideos] = useState(true);
   const videoRef = useRef(null);
   const [renderKey, setRenderKey] = useState(true);
+  const [currentVideo, setCurrentVideo] = useState(null);
 
   const handleProceed = async () => {
     setIsProcessing(true);
@@ -23,22 +24,20 @@ function App() {
       const downloaded = [];
 
       for (const video of videos) {
-        try {
-          const localPath = await window.electron.downloadVideo(
-            video.secure_url,
-            `${video.public_id}.mp4`
-          );
+        const localPath = await downloadVideos(
+          video.secure_url,
+          video.public_id
+        );
 
+        if (localPath) {
           console.log("localPath: ", localPath || " ");
           downloaded.push({ ...video, localPath });
           localStorage.setItem(video.public_id, localPath);
-        } catch (err) {
-          console.error(`Download failed for ${video.public_id}`, err);
-          showToast(`Failed to download ${video.public_id}`, "error");
         }
       }
 
       console.log("downloaded: ", downloaded);
+      setCurrentVideo(downloaded[0]);
       setDownloadedVideos(downloaded);
 
       if (downloaded.length > 0) {
@@ -52,7 +51,23 @@ function App() {
     }
   };
 
+  const downloadVideos = async (secure_url, public_id) => {
+    try {
+      const localPath = await window.electron.downloadVideo(
+        secure_url,
+        `${public_id}.mp4`
+      );
+
+      return localPath;
+    } catch (err) {
+      console.error(`Download failed for ${video.public_id}`, err);
+      showToast(`Failed to download ${video.public_id}`, "error");
+      return null;
+    }
+  };
+
   const callIntervaleAPI = async () => {
+    console.log("callIntervaleAPI");
     try {
       const res = await axiosClient.get(
         `video/get/by/location/id/6830114362e775e471a0bd7d`
@@ -79,6 +94,7 @@ function App() {
         await handleProceed();
       } else {
         setDownloadedVideos(existing);
+        setCurrentVideo(existing[0]);
         if (existing.length > 0) {
           setCurrentVideoIndex(0);
         }
@@ -105,37 +121,80 @@ function App() {
       currentVideoIndex !== null &&
       downloadedVideos[currentVideoIndex]?.localPath
     ) {
-      videoRef.current.currentTime = 0;
-      videoRef.current
-        .play()
-        .catch((e) => console.error("Error attempting to play video:", e));
-    }
-  };
+      const playPromise = videoRef.current.play();
 
-  const playNextVideo = () => {
-    if (downloadedVideos.length <= 1) {
-      playAgain();
-      console.log("current video: ", downloadedVideos[currentVideoIndex]);
-    } else {
-      let temp = currentVideoIndex;
-      if (currentVideoIndex < downloadedVideos.length - 1) {
-        setCurrentVideoIndex(currentVideoIndex + 1);
-        temp = temp + 1;
-      } else {
-        setCurrentVideoIndex(0);
-        temp = 0;
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.error("Error attempting to play video:", error);
+        });
       }
-      console.log("current video: ", downloadedVideos[temp]);
     }
   };
 
-  const handleDelete = async (id) => {
-    console.log("handleDelete called , id", id);
-    const path = localStorage.getItem(id);
-    if (!path) {
-      console.log("no video is present", id);
-      return;
+  const toggleFullScreen = () => {
+    if (videoRef.current) {
+      const enterFullscreen =
+        videoRef.current.requestFullscreen ||
+        videoRef.current.webkitRequestFullscreen ||
+        videoRef.current.msRequestFullscreen;
+
+      if (enterFullscreen) {
+        enterFullscreen.call(videoRef.current).catch((err) => {
+          console.error("Error attempting to enable full-screen mode:", err);
+        });
+      }
     }
+  };
+
+  const playNextVideo = async () => {
+    let tempVideos = [...downloadedVideos];
+
+    console.log("playNextVideo tempVideos before loop: ", tempVideos);
+
+    // Filter out videos without a local path
+    tempVideos = tempVideos.filter((video) => {
+      const path = localStorage.getItem(video?.public_id);
+      return path !== null;
+    });
+
+    console.log(
+      " tempVideos.length ",
+      tempVideos.length,
+      "playNextVideo tempVideos after loop: ",
+      tempVideos
+    );
+
+    if (tempVideos.length <= 1) {
+      setCurrentVideo(tempVideos[0]);
+
+      playAgain();
+      console.log("current video: ", tempVideos[0]);
+    } else {
+      let tempIndex = currentVideoIndex;
+      if (currentVideoIndex < tempVideos.length - 1) {
+        tempIndex += 1;
+      } else {
+        tempIndex = 0;
+      }
+
+      // Ensure the video at tempIndex is defined
+      if (tempVideos[tempIndex]) {
+        setCurrentVideoIndex(tempIndex);
+        setCurrentVideo(tempVideos[tempIndex]);
+        console.log("current video: ", tempVideos[tempIndex]);
+      } else {
+        console.error("Video at index is undefined:", tempIndex);
+      }
+    }
+
+    setDownloadedVideos(tempVideos);
+  };
+
+  const deleteVideoLocally = async (id, path) => {
+    setPlayVideos(false);
+    setIsProcessing(true);
+    console.log("handleDelete called , id", id);
+
     console.log("path: ", path);
 
     setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
@@ -153,7 +212,6 @@ function App() {
           playNextVideo();
         }
         setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
-        localStorage.removeItem(id);
       } else {
       }
       if (downloadedVideos[currentVideoIndex]?.public_id === id) {
@@ -162,20 +220,15 @@ function App() {
     } catch (error) {
       console.error("Error deleting video:", error);
     }
+    setPlayVideos(true);
+    setIsProcessing(true);
+    toggleFullScreen();
   };
 
-  const toggleFullScreen = () => {
-    if (videoRef.current) {
-      if (videoRef.current.requestFullscreen) {
-        videoRef.current.requestFullscreen().catch((err) => {
-          console.error("Error attempting to enable full-screen mode:", err);
-        });
-      } else if (videoRef.current.webkitRequestFullscreen) {
-        videoRef.current.webkitRequestFullscreen();
-      } else if (videoRef.current.msRequestFullscreen) {
-        videoRef.current.msRequestFullscreen();
-      }
-    }
+  const handleDelete = async (id, path) => {
+    console.log("handleDelete called , id", id);
+
+    localStorage.removeItem(id);
   };
 
   useEffect(() => {
@@ -188,22 +241,29 @@ function App() {
     }
   }, [currentVideoIndex]);
 
+  useEffect(() => {
+    console.log("currentVideo: ", currentVideo);
+  }, [currentVideo]);
+
   return (
     <div className="fullscreen-video-container">
       <div
         className={`${
-          downloadedVideos.length > 0 && playVideos ? "d-block" : "d-none"
+          downloadedVideos.length > 0 && playVideos == true
+            ? "d-block"
+            : "d-none"
         }`}
       >
-        {currentVideoIndex !== null &&
-          downloadedVideos[currentVideoIndex]?.localPath && (
+        {currentVideo &&
+          currentVideoIndex !== null &&
+          currentVideo?.localPath && (
             <video
               key={renderKey}
               ref={videoRef}
               autoPlay
               muted
               playsInline
-              src={`file://${downloadedVideos[currentVideoIndex]?.localPath}`}
+              src={`file://${currentVideo.localPath}`}
               onEnded={playNextVideo}
               style={{
                 width: "100%",
