@@ -153,6 +153,16 @@ function App() {
       localStorage.getItem(v.public_id)
     );
 
+    for (let i in downloadedVideos) {
+      const path = await localStorage.getItem(downloadedVideos[i].public_id);
+      if (!path) {
+        deleteVideoLocally(
+          downloadedVideos[i].public_id,
+          downloadedVideos[i].localPath
+        );
+      }
+    }
+
     if (availableVideos.length === 0) {
       setCurrentVideo(null);
       return;
@@ -200,23 +210,16 @@ function App() {
 
     setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
     try {
-      const res = await axiosClient.delete(`video/delete/${id}`);
+      /*   const res = await axiosClient.delete(`video/delete/${id}`);
       if (!res) {
         console.log("could not delete video");
         return;
-      }
+      } */
 
       const success = await window.electron.deleteVideo(path);
 
       if (success) {
-        if (downloadedVideos[currentVideoIndex]?.public_id === id) {
-          playNextVideo();
-        }
-        setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
-      } else {
-      }
-      if (downloadedVideos[currentVideoIndex]?.public_id === id) {
-        playNextVideo();
+        //setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
       }
     } catch (error) {
       console.error("Error deleting video:", error);
@@ -224,6 +227,8 @@ function App() {
     setPlayVideos(true);
     setIsProcessing(true);
     toggleFullScreen();
+
+    return;
   };
 
   const handleDelete = async (id, path) => {
@@ -243,8 +248,8 @@ function App() {
   }, [currentVideoIndex]);
 
   useEffect(() => {
-    console.log("currentVideo: ", currentVideo);
-  }, [currentVideo]);
+    console.log("downloadedVideos: ", downloadedVideos);
+  }, [downloadedVideos]);
 
   return (
     <div className="fullscreen-video-container">
@@ -264,7 +269,7 @@ function App() {
               autoPlay
               muted
               playsInline
-              src={`file://${currentVideo.localPath}`}
+              src={`file://${currentVideo?.localPath}`}
               onEnded={playNextVideo}
               style={{
                 width: "100%",
