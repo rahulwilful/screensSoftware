@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import axiosClient from "./axiosClient";
 import showToast from "./components/notification/ShowtToast";
 import "./App.css";
@@ -11,6 +11,7 @@ function App() {
   const videoRef = useRef(null);
   const [renderKey, setRenderKey] = useState(true);
   const [currentVideo, setCurrentVideo] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const handleProceed = async () => {
     setIsProcessing(true);
@@ -115,21 +116,19 @@ function App() {
     }
   }, [downloadedVideos]);
 
-  const playAgain = () => {
-    if (
-      videoRef.current &&
-      currentVideoIndex !== null &&
-      downloadedVideos[currentVideoIndex]?.localPath
-    ) {
-      const playPromise = videoRef.current.play();
+  const playVideo = useCallback(async () => {
+    if (!videoRef.current || !currentVideo) return;
 
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.error("Error attempting to play video:", error);
-        });
-      }
+    try {
+      videoRef.current.currentTime = 0; // Reset to start
+      await videoRef.current.play();
+      setIsPlaying(true);
+    } catch (err) {
+      console.error("Playback error:", err);
+      // If playback fails, try again after a short delay
+      setTimeout(playVideo, 1000);
     }
-  };
+  }, [currentVideo]);
 
   const toggleFullScreen = () => {
     if (videoRef.current) {
@@ -146,49 +145,51 @@ function App() {
     }
   };
 
-  const playNextVideo = async () => {
-    let tempVideos = [...downloadedVideos];
+  // Improved playNextVideo that handles single video case
+  const playNextVideo = useCallback(async () => {
+    if (downloadedVideos.length === 0) return;
 
-    console.log("playNextVideo tempVideos before loop: ", tempVideos);
-
-    // Filter out videos without a local path
-    tempVideos = tempVideos.filter((video) => {
-      const path = localStorage.getItem(video?.public_id);
-      return path !== null;
-    });
-
-    console.log(
-      " tempVideos.length ",
-      tempVideos.length,
-      "playNextVideo tempVideos after loop: ",
-      tempVideos
+    const availableVideos = downloadedVideos.filter((v) =>
+      localStorage.getItem(v.public_id)
     );
 
-    if (tempVideos.length <= 1) {
-      setCurrentVideo(tempVideos[0]);
-
-      playAgain();
-      console.log("current video: ", tempVideos[0]);
-    } else {
-      let tempIndex = currentVideoIndex;
-      if (currentVideoIndex < tempVideos.length - 1) {
-        tempIndex += 1;
-      } else {
-        tempIndex = 0;
-      }
-
-      // Ensure the video at tempIndex is defined
-      if (tempVideos[tempIndex]) {
-        setCurrentVideoIndex(tempIndex);
-        setCurrentVideo(tempVideos[tempIndex]);
-        console.log("current video: ", tempVideos[tempIndex]);
-      } else {
-        console.error("Video at index is undefined:", tempIndex);
-      }
+    if (availableVideos.length === 0) {
+      setCurrentVideo(null);
+      return;
     }
 
-    setDownloadedVideos(tempVideos);
-  };
+    // If only one video remains, keep playing it
+    if (availableVideos.length === 1) {
+      setCurrentVideo(availableVideos[0]);
+      await playVideo();
+      return;
+    }
+
+    // For multiple videos, play next in sequence
+    const currentIndex = availableVideos.findIndex(
+      (v) => v.public_id === currentVideo?.public_id
+    );
+    const nextIndex = (currentIndex + 1) % availableVideos.length;
+    setCurrentVideo(availableVideos[nextIndex]);
+
+    console.log(
+      "(",
+      currentIndex,
+      " + 1) % ",
+      availableVideos.length,
+      " = ",
+      (currentIndex + 1) % availableVideos.length
+    );
+
+    console.log(
+      "availableVideos.length: ",
+      availableVideos.length,
+      "  currentIndex: ",
+      currentIndex,
+      " nextIndex: ",
+      nextIndex
+    );
+  }, [downloadedVideos, currentVideo, playVideo]);
 
   const deleteVideoLocally = async (id, path) => {
     setPlayVideos(false);
@@ -258,7 +259,7 @@ function App() {
           currentVideoIndex !== null &&
           currentVideo?.localPath && (
             <video
-              key={renderKey}
+              key={currentVideo}
               ref={videoRef}
               autoPlay
               muted
