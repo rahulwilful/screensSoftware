@@ -2,19 +2,22 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import axiosClient from "./axiosClient";
 import showToast from "./components/notification/ShowtToast";
 import "./App.css";
+import defaultVideo from "./assets/defaultVideo.mp4";
 
 function App() {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(null);
-  const [playVideos, setPlayVideos] = useState(true);
+  const [playVideos, setPlayVideos] = useState(false);
+  const [loadingContent, setLoadingContent] = useState(null);
   const videoRef = useRef(null);
-  const [renderKey, setRenderKey] = useState(true);
+  const defaultVideoRef = useRef(null);
   const [currentVideo, setCurrentVideo] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [playDefault, setPlayDefault] = useState(false);
 
   const handleProceed = async () => {
-    setIsProcessing(true);
+    setLoadingContent(true);
+    setPlayDefault(false);
+    setPlayVideos(false);
     try {
       const res = await axiosClient.get(
         `video/get/by/location/id/6830114362e775e471a0bd7d`
@@ -46,10 +49,12 @@ function App() {
       }
     } catch (error) {
       console.error("Error fetching videos:", error);
+      setPlayDefault(true);
       showToast("Failed to fetch videos", "error");
     } finally {
-      setIsProcessing(false);
     }
+    setPlayVideos(true);
+    setLoadingContent(false);
   };
 
   const downloadVideos = async (secure_url, public_id) => {
@@ -67,14 +72,57 @@ function App() {
     }
   };
 
+  const addVideoToQue = async (videos) => {
+    console.log("videos: ", videos ? videos : "[]");
+    if (!videos) return;
+    let tempDownloaded = downloadedVideos ? downloadedVideos : [];
+
+    console.log("tempDownloaded before loop: ", tempDownloaded);
+    let flag = 0;
+
+    for (const video of videos) {
+      const tempPath = localStorage.getItem(video.public_id) || null;
+      console.log("video: ", video, " tempPath: ", tempPath);
+      if (video.show_adv == true && !tempPath) {
+        const localPath = await downloadVideos(
+          video.secure_url,
+          video.public_id
+        );
+
+        if (localPath) {
+          video.localPath = localPath;
+          tempDownloaded.push(video);
+          localStorage.setItem(video.public_id, localPath);
+          flag = 1;
+        }
+      }
+    }
+
+    console.log("tempDownloaded after loop: ", tempDownloaded);
+    if (downloadVideos.length == 0) {
+      setCurrentVideo(tempDownloaded[0]);
+      setCurrentVideoIndex(0);
+    }
+
+    setDownloadedVideos(tempDownloaded);
+
+    if (flag == 1) {
+      setPlayDefault(false);
+      setPlayVideos(true);
+    }
+  };
+
   const callIntervaleAPI = async () => {
     console.log("callIntervaleAPI");
+    let tempVideos = [];
     try {
       const res = await axiosClient.get(
         `video/get/by/location/id/6830114362e775e471a0bd7d`
       );
 
       const videos = res?.data?.result || [];
+
+      tempVideos = videos;
       if (videos.length > 0) {
         for (let i in videos) {
           if (videos[i].show_adv == false) {
@@ -85,6 +133,8 @@ function App() {
     } catch (error) {
       console.error("Error fetching videos:", error);
     }
+
+    addVideoToQue(tempVideos);
   };
 
   const consoleLogVideoFiles = async () => {
@@ -96,6 +146,7 @@ function App() {
       } else {
         setDownloadedVideos(existing);
         setCurrentVideo(existing[0]);
+
         if (existing.length > 0) {
           setCurrentVideoIndex(0);
         }
@@ -108,12 +159,11 @@ function App() {
 
   useEffect(() => {
     console.log("Existing videos:", downloadedVideos);
-    if (downloadedVideos.length > 0) {
-      const interval = setInterval(() => {
-        callIntervaleAPI();
-      }, 10000);
-      return () => clearInterval(interval);
-    }
+
+    const interval = setInterval(() => {
+      callIntervaleAPI();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [downloadedVideos]);
 
   const playVideo = useCallback(async () => {
@@ -122,7 +172,6 @@ function App() {
     try {
       videoRef.current.currentTime = 0; // Reset to start
       await videoRef.current.play();
-      setIsPlaying(true);
     } catch (err) {
       console.error("Playback error:", err);
       // If playback fails, try again after a short delay
@@ -203,29 +252,29 @@ function App() {
 
   const deleteVideoLocally = async (id, path) => {
     setPlayVideos(false);
-    setIsProcessing(true);
+
     console.log("handleDelete called , id", id);
 
     console.log("path: ", path);
 
     setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
     try {
-      /*   const res = await axiosClient.delete(`video/delete/${id}`);
+      const res = await axiosClient.delete(`video/delete/${id}`);
       if (!res) {
         console.log("could not delete video");
         return;
-      } */
+      }
 
       const success = await window.electron.deleteVideo(path);
 
       if (success) {
-        //setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
+        setDownloadedVideos((prev) => prev.filter((v) => v.public_id !== id));
       }
     } catch (error) {
       console.error("Error deleting video:", error);
     }
     setPlayVideos(true);
-    setIsProcessing(true);
+
     toggleFullScreen();
 
     return;
@@ -249,7 +298,52 @@ function App() {
 
   useEffect(() => {
     console.log("downloadedVideos: ", downloadedVideos);
+
+    if (downloadedVideos.length > 0 && !playVideos) {
+      console.log("switching to downloaded videos");
+      setPlayVideos(true);
+      setPlayDefault(false);
+      setCurrentVideo(downloadedVideos[0]);
+      setCurrentVideoIndex(0);
+      toggleFullScreen();
+    } else {
+      console.log("switching to default videos");
+      setPlayVideos(true);
+      setPlayDefault(true);
+      toggleFullScreenForDefault();
+      setCurrentVideo(defaultVideo);
+    }
   }, [downloadedVideos]);
+
+  useEffect(() => {
+    if (downloadedVideos.length === 1 && playDefault === true) {
+      console.log("Switching from default video to real video");
+      setPlayVideos(true);
+      setPlayDefault(false);
+      setCurrentVideo(downloadedVideos[0]);
+      setCurrentVideoIndex(0);
+      toggleFullScreen();
+    }
+  }, [downloadedVideos, playDefault]);
+
+  useEffect(() => {
+    console.log("playVideos: ", playVideos);
+  }, [playVideos]);
+
+  const toggleFullScreenForDefault = () => {
+    if (defaultVideoRef.current) {
+      const enterFullscreen =
+        defaultVideoRef.current.requestFullscreen ||
+        defaultVideoRef.current.webkitRequestFullscreen ||
+        defaultVideoRef.current.msRequestFullscreen;
+
+      if (enterFullscreen) {
+        enterFullscreen.call(defaultVideoRef.current).catch((err) => {
+          console.error("Error attempting to enable full-screen mode:", err);
+        });
+      }
+    }
+  };
 
   return (
     <div className="fullscreen-video-container">
@@ -269,7 +363,11 @@ function App() {
               autoPlay
               muted
               playsInline
-              src={`file://${currentVideo?.localPath}`}
+              src={
+                downloadVideos.length > 0
+                  ? `file://${currentVideo?.localPath}`
+                  : defaultVideo
+              }
               onEnded={playNextVideo}
               style={{
                 width: "100%",
@@ -283,7 +381,37 @@ function App() {
       </div>
       <div
         className={`${
-          downloadedVideos.length > 0 ? "d-none" : "d-block"
+          downloadedVideos.length <= 0 &&
+          playVideos == true &&
+          playDefault == true
+            ? "d-block"
+            : "d-none"
+        }`}
+      >
+        <video
+          key={defaultVideo}
+          ref={defaultVideoRef}
+          autoPlay
+          muted
+          playsInline
+          src={currentVideo}
+          loop
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            pointerEvents: "none",
+          }}
+          controls={false}
+        />
+      </div>
+      <div
+        className={`${
+          downloadedVideos.length <= 0 &&
+          playVideos == false &&
+          loadingContent == true
+            ? "d-none"
+            : "d-block"
         } d-flex align-items-center justify-content-center vh-100 fw-bold text-secondary fs-1`}
       >
         Loading Content
