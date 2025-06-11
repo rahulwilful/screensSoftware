@@ -120,3 +120,9 @@ ipcMain.handle("get-downloaded-videos", async (event) => {
     return [];
   }
 });
+
+// Handle restart request
+ipcMain.on("restart_app", () => {
+  app.relaunch();
+  app.exit(0);
+});
