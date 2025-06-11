@@ -5,7 +5,7 @@ import defaultVideo from "../../assets/defaultVideo.mp4";
 import axiosClient from "../../axiosClient";
 import showToast from "./ShowtToast";
 
-function Video() {
+function Video({ toggleDefault }) {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(null);
   const [playVideos, setPlayVideos] = useState(false);
@@ -64,7 +64,6 @@ function Video() {
     } catch (error) {
       console.error("Error fetching videos:", error);
       setPlayDefault(true);
-      showToast("Failed to fetch videos", "error");
     } finally {
     }
     setPlayVideos(true);
@@ -81,7 +80,6 @@ function Video() {
       return localPath;
     } catch (err) {
       console.error(`Download failed for ${video.public_id}`, err);
-      showToast(`Failed to download ${video.public_id}`, "error");
       return null;
     }
   };
@@ -89,7 +87,7 @@ function Video() {
   const addVideoToQue = async (videos) => {
     console.log("videos: ", videos ? videos : "[]");
     if (!videos) return;
-    let tempDownloaded = downloadedVideos;
+    let tempDownloaded = downloadedVideos ? downloadedVideos : [];
 
     console.log("tempDownloaded before loop: ", tempDownloaded);
     let flag = 0;
@@ -115,6 +113,8 @@ function Video() {
     console.log("tempDownloaded after loop: ", tempDownloaded);
     if (downloadVideos.length == 0 && flag == 1) {
       //reStart();
+
+      window.location.reload();
       setCurrentVideo(tempDownloaded[0]);
       setCurrentVideoIndex(0);
     }
@@ -136,6 +136,9 @@ function Video() {
       );
 
       const videos = res?.data?.result || [];
+      if (!res) {
+        toggleDefault(true);
+      }
 
       tempVideos = videos;
       if (videos.length > 0) {
@@ -147,6 +150,7 @@ function Video() {
       }
     } catch (error) {
       console.error("Error fetching videos:", error);
+      toggleDefault(true);
     }
 
     addVideoToQue(tempVideos);
@@ -177,7 +181,7 @@ function Video() {
 
     const interval = setInterval(() => {
       callIntervaleAPI();
-    }, 10000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [downloadedVideos]);
 
@@ -421,7 +425,6 @@ function Video() {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-
             pointerEvents: "none",
           }}
           controls={false}

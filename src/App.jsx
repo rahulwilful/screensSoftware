@@ -2,13 +2,23 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import axiosClient from "./axiosClient";
 import showToast from "./components/notification/ShowtToast";
 import "./App.css";
-import defaultVideo from "./assets/defaultVideo.mp4";
 import Video from "./components/notification/Video";
+import DefaultVideo from "./components/notification/DefaultVideo";
 
 function App() {
+  const [playDefault, setPlayDefault] = useState(false);
+
+  const toggleDefault = (toggle) => {
+    setPlayDefault(toggle);
+  };
+
   return (
     <div>
-      <Video />
+      {playDefault == true ? (
+        <DefaultVideo toggleDefault={toggleDefault} />
+      ) : (
+        <Video toggleDefault={toggleDefault} />
+      )}
     </div>
   );
 }
