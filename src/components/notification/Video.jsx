@@ -198,7 +198,7 @@ function Video({ toggleDefault, playDefault }) {
   }, [currentVideo]);
 
   const toggleFullScreen = () => {
-    if (videoRef.current) {
+    /*  if (videoRef.current) {
       const enterFullscreen =
         videoRef.current.requestFullscreen ||
         videoRef.current.webkitRequestFullscreen ||
@@ -209,7 +209,7 @@ function Video({ toggleDefault, playDefault }) {
           console.error("Error attempting to enable full-screen mode:", err);
         });
       }
-    }
+    } */
   };
 
   // Improved playNextVideo that handles single video case
@@ -350,7 +350,7 @@ function Video({ toggleDefault, playDefault }) {
   }, [playVideos, , loadingContent]);
 
   const toggleFullScreenForDefault = () => {
-    if (defaultVideoRef.current) {
+    /*  if (defaultVideoRef.current) {
       const enterFullscreen =
         defaultVideoRef.current.requestFullscreen ||
         defaultVideoRef.current.webkitRequestFullscreen ||
@@ -361,7 +361,7 @@ function Video({ toggleDefault, playDefault }) {
           console.error("Error attempting to enable full-screen mode:", err);
         });
       }
-    }
+    } */
   };
 
   useEffect(() => {

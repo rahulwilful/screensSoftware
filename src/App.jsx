@@ -7,6 +7,7 @@ import DefaultVideo from "./components/notification/DefaultVideo";
 
 function App() {
   const [playDefault, setPlayDefault] = useState(false);
+  const containerRef = useRef(null);
 
   const toggleDefault = (toggle) => {
     if (toggle == true) {
@@ -17,8 +18,28 @@ function App() {
     setPlayDefault(toggle);
   };
 
+  useEffect(() => {
+    const goFullScreen = () => {
+      const el = containerRef.current;
+      if (el) {
+        const enterFullscreen =
+          el.requestFullscreen ||
+          el.webkitRequestFullscreen ||
+          el.msRequestFullscreen;
+
+        if (enterFullscreen) {
+          enterFullscreen
+            .call(el)
+            .catch((err) => console.error("Fullscreen failed:", err));
+        }
+      }
+    };
+
+    goFullScreen(); // request fullscreen ONCE when app loads
+  }, []);
+
   return (
-    <div>
+    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
       {playDefault == true ? (
         <DefaultVideo toggleDefault={toggleDefault} playDefault={playDefault} />
       ) : (
