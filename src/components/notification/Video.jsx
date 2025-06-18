@@ -5,7 +5,7 @@ import defaultVideo from "../../assets/defaultVideo.mp4";
 import axiosClient from "../../axiosClient";
 import showToast from "./ShowtToast";
 
-function Video({ toggleDefault }) {
+function Video({ toggleDefault, playDefault }) {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(null);
   const [playVideos, setPlayVideos] = useState(false);
@@ -13,7 +13,6 @@ function Video({ toggleDefault }) {
   const videoRef = useRef(null);
   const defaultVideoRef = useRef(null);
   const [currentVideo, setCurrentVideo] = useState(null);
-  const [playDefault, setPlayDefault] = useState(false);
 
   const reStart = () => {
     // Reset your application state if necessary
@@ -22,7 +21,6 @@ function Video({ toggleDefault }) {
     setPlayVideos(false);
     setLoadingContent(null);
     setCurrentVideo(null);
-    setPlayDefault(false);
 
     // Send a message to the main process to restart the app
     ipcRenderer.send("restart_app");
@@ -30,7 +28,7 @@ function Video({ toggleDefault }) {
 
   const handleProceed = async () => {
     setLoadingContent(true);
-    setPlayDefault(false);
+
     setPlayVideos(false);
     try {
       const res = await axiosClient.get(
@@ -63,7 +61,6 @@ function Video({ toggleDefault }) {
       }
     } catch (error) {
       console.error("Error fetching videos:", error);
-      setPlayDefault(true);
     } finally {
     }
     setPlayVideos(true);
@@ -122,12 +119,14 @@ function Video({ toggleDefault }) {
     setDownloadedVideos(tempDownloaded);
 
     if (flag == 1) {
-      setPlayDefault(false);
       setPlayVideos(true);
     }
   };
 
   const callIntervaleAPI = async () => {
+    console.log("playDefault: ", playDefault);
+    if (playDefault == true) return;
+
     console.log("callIntervaleAPI");
     let tempVideos = [];
     try {
@@ -321,35 +320,34 @@ function Video({ toggleDefault }) {
     if (downloadedVideos.length > 0 && !playVideos) {
       console.log("switching to downloaded videos");
       setPlayVideos(true);
-      setPlayDefault(false);
+
       setCurrentVideo(downloadedVideos[0]);
       setCurrentVideoIndex(0);
       toggleFullScreen();
     } else {
       console.log("switching to default videos");
       setPlayVideos(true);
-      setPlayDefault(true);
+
       toggleFullScreenForDefault();
       setCurrentVideo(defaultVideo);
     }
   }, [downloadedVideos]);
 
   useEffect(() => {
-    if (downloadedVideos.length >= 1 && playDefault === true) {
+    if (downloadedVideos.length >= 1) {
       console.log("Switching from default video to real video");
       setPlayVideos(true);
-      setPlayDefault(false);
+
       setCurrentVideo(downloadedVideos[0]);
       setCurrentVideoIndex(0);
       toggleFullScreen();
     }
-  }, [downloadedVideos, playDefault]);
+  }, [downloadedVideos]);
 
   useEffect(() => {
     console.log("playVideos: ", playVideos);
-    console.log("playDefault: ", playDefault);
     console.log("loadingContent: ", loadingContent);
-  }, [playVideos, playDefault, loadingContent]);
+  }, [playVideos, , loadingContent]);
 
   const toggleFullScreenForDefault = () => {
     if (defaultVideoRef.current) {
@@ -406,9 +404,7 @@ function Video({ toggleDefault }) {
       </div>
       <div
         className={`${
-          downloadedVideos.length <= 0 &&
-          playVideos == true &&
-          playDefault == true
+          downloadedVideos.length <= 0 && playVideos == true
             ? "d-block"
             : "d-none"
         }`}
@@ -434,8 +430,7 @@ function Video({ toggleDefault }) {
         className={`${
           loadingContent == true &&
           downloadedVideos.length == 0 &&
-          playVideos == false &&
-          playDefault == false
+          playVideos == false
             ? "d-none"
             : "d-block"
         } d-flex align-items-center justify-content-center vh-100 fw-bold text-secondary fs-1`}
